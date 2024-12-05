@@ -1,0 +1,19 @@
+mysqls:
+  s1:
+    host: mysql-s1
+    password: root
+    user: root
+  s2:
+    host: mysql-s2
+    password: root
+    user: root
+proxysqls:
+- host: proxysql
+  password: pwd
+  user: radmin
+users:
+  exporterPassword: exporter
+  nonprivPassword: password
+  nonprivUser: hamadmin
+  proxysqlMonPassword: password
+  replPassword: password

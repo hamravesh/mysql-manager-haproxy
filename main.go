@@ -1,16 +1,15 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"os/signal"
-	"syscall"
-	"time"
+	"strconv"
 
 	cdh "mm-haproxy/pkg/clusterdatahandler"
 	hc "mm-haproxy/pkg/haproxyconfig"
 )
+
+const clusterDataCheckIntervalDefault = 2
 
 func main() {
 	etcdHost, ok := os.LookupEnv("ETCD_HOST")
@@ -18,9 +17,9 @@ func main() {
 		fmt.Println("ETCD_HOST environment variable is not set")
 		os.Exit(1)
 	}
-	etcdUser, ok := os.LookupEnv("ETCD_USER")
+	etcdUser, ok := os.LookupEnv("ETCD_USERNAME")
 	if !ok {
-		fmt.Println("ETCD_USER environment variable is not set")
+		fmt.Println("ETCD_USERNAME environment variable is not set")
 		os.Exit(1)
 	}
 	etcdPassword, ok := os.LookupEnv("ETCD_PASSWORD")
@@ -34,14 +33,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	cdHandler, err := cdh.NewClusterDataHandler(etcdHost, etcdUser, etcdPassword, etcdPrefix)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
-	cdHandler := cdh.NewClusterDataHandler(etcdHost, etcdUser, etcdPassword, etcdPrefix)
-	manager := hc.NewHAProxyConfigManager()
-	ctx, cancelFunc := context.WithTimeout(context.Background(), 10*time.Second)
-	go manager.Run(ctx, cdHandler)
-	
-	signalCh := make(chan os.Signal, 1)
-	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM)
-	<-signalCh
-	cancelFunc()
+	clusterDataCheckInterval := clusterDataCheckIntervalDefault
+	clusterDataCheckIntervalStr, ok := os.LookupEnv("CLUSTER_DATA_CHECK_INTERVAL")
+	if !ok {
+		clusterDataCheckInterval, err = strconv.Atoi(clusterDataCheckIntervalStr)
+		if err != nil {
+			clusterDataCheckInterval = clusterDataCheckIntervalDefault
+		}
+	}
+
+	manager := hc.NewHAProxyConfigManager(clusterDataCheckInterval)
+	manager.Run(cdHandler)
 }

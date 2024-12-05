@@ -1,0 +1,39 @@
+version: '3'
+
+services: 
+  mm: 
+    image: registry.hamdocker.ir/public/mysql-manager:main
+    environment: 
+      ETCD_HOST: etcd
+      ETCD_USERNAME: mm
+      ETCD_PASSWORD: password
+      ETCD_PREFIX: mm/cluster1/
+    volumes:
+    - './tests/configs/mm-config-mysql-2.yaml:/etc/mm/cluster-spec.yaml'
+  mm-hap:
+    build: .
+    environment: 
+      ETCD_HOST: http://etcd:2379
+      ETCD_USERNAME: mm
+      ETCD_PASSWORD: password
+      ETCD_PREFIX: mm/cluster1/
+    ports:
+    - 6070:6070
+    - 3306:3306
+    volumes:
+    - './tests/config/mm-config-mysql-2.yaml:/etc/mm/cluster-spec.yaml'
+    restart: always
+  etcd: 
+    image: quay.hamdocker.ir/coreos/etcd:v3.5.9-amd64
+    command: 
+        - etcd
+        - --data-dir=/var/lib/etcd
+        - --name=mm-etcd
+        - --advertise-client-urls=http://etcd:2379
+        - --initial-cluster-token=etcd-cluster
+        - --initial-cluster-state=new
+        - --listen-client-urls=http://0.0.0.0:2379
+        - --listen-metrics-urls=http://0.0.0.0:2381
+        - --listen-peer-urls=http://0.0.0.0:2380
+        - --auto-compaction-mode=revision
+        - --auto-compaction-retention=5

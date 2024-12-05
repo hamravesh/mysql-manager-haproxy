@@ -2,43 +2,77 @@ package clusterdatahandler
 
 import (
 	"context"
+	"fmt"
+	"log"
+	"time"
+
+	clientv3 "go.etcd.io/etcd/client/v3"
+	yaml "gopkg.in/yaml.v3"
 )
 
-type MysqlRole string 
+type MysqlRole string
 
 const (
-	Source MysqlRole = "source" 
-	Replica MysqlRole = "replica" 
-	ReadonlyReplica MysqlRole = "readonly_replica" 
+	Source          MysqlRole = "source"
+	Replica         MysqlRole = "replica"
+	ReadonlyReplica MysqlRole = "readonly_replica"
 )
 
+const etcdClusterDataKey = "cluster_data"
 
 type MysqlData struct {
-	role MysqlRole
-	user, password, host string 
-	port int
+	Role                 MysqlRole
+	User, Password, Host string
+	Port                 int
 }
 
-type ClusterData struct {
-	Mysqls map[string]MysqlData
+type ClusterMysqls map[string]MysqlData
+
+type clusterDataRaw struct {
+	Mysqls    map[string]MysqlData
+	Proxysqls []map[string]string
+	Status    map[string]string
+	Users     map[string]string
 }
 
 type ClusterDataHandler struct {
-	EtcdHost     string
-	EtcdUser     string
-	EtcdPassword string
-	EtcdPrefix   string
+	etcdClient *clientv3.Client
+	etcdPrefix string
 }
 
-func NewClusterDataHandler(host, user, password, prefix string) ClusterDataHandler {
-	return ClusterDataHandler{
-		EtcdHost: host,
-		EtcdUser: user,
-		EtcdPassword: password,
-		EtcdPrefix: prefix,
+func NewClusterDataHandler(etcdHost, etcdUser, etcdPassword, etcdPrefix string) (*ClusterDataHandler, error) {
+	client, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{etcdHost},
+		Username:    etcdUser,
+		Password:    etcdPassword,
+		DialTimeout: 20 * time.Second,
+		MaxUnaryRetries: 5,
+		BackoffWaitBetween: 10 * time.Second,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error creating etcd client: %w", err)
 	}
+	return &ClusterDataHandler{etcdClient: client, etcdPrefix: etcdPrefix}, nil
 }
 
-func (cdh *ClusterDataHandler) ReadClusterData(ctx context.Context) ClusterData {
-	return ClusterData{}
+func (cdh *ClusterDataHandler) ReadClusterMysqls(ctx context.Context) ClusterMysqls {
+	resp, err := cdh.etcdClient.Get(ctx, cdh.etcdPrefix+etcdClusterDataKey)
+	if err != nil {
+		// TODO: check if it is better to use log
+		log.Printf("%v", err)
+	}
+
+	cdRaw := clusterDataRaw{}
+	for _, ev := range resp.Kvs {
+		err = yaml.Unmarshal(ev.Value, &cdRaw)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	return cdRaw.Mysqls
+}
+
+func (cdh *ClusterDataHandler) Destroy() {
+	cdh.etcdClient.Close()
 }
