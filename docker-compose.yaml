@@ -10,8 +10,10 @@ services:
       ETCD_PREFIX: mm/cluster1/
     volumes:
     - './tests/configs/mm-config-mysql-2.yaml:/etc/mm/cluster-spec.yaml'
-  mm-hap:
-    build: .
+  mm-haproxy:
+    build: 
+      context: .
+    image: mm-haproxy
     environment: 
       ETCD_HOST: http://etcd:2379
       ETCD_USERNAME: mm
@@ -20,8 +22,6 @@ services:
     ports:
     - 6070:6070
     - 3306:3306
-    volumes:
-    - './tests/config/mm-config-mysql-2.yaml:/etc/mm/cluster-spec.yaml'
     restart: always
   etcd: 
     image: quay.hamdocker.ir/coreos/etcd:v3.5.9-amd64
@@ -37,3 +37,7 @@ services:
         - --listen-peer-urls=http://0.0.0.0:2380
         - --auto-compaction-mode=revision
         - --auto-compaction-retention=5
+    ports: 
+    - 2300:2379
+    volumes: 
+    - ./etcd-data:/var/lib/etcd

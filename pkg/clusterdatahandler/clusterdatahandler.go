@@ -56,18 +56,22 @@ func NewClusterDataHandler(etcdHost, etcdUser, etcdPassword, etcdPrefix string) 
 }
 
 func (cdh *ClusterDataHandler) ReadClusterMysqls(ctx context.Context) ClusterMysqls {
-	resp, err := cdh.etcdClient.Get(ctx, cdh.etcdPrefix+etcdClusterDataKey)
+	cdRaw := clusterDataRaw{}
+	tctx, cancel := context.WithTimeout(ctx, 5 * time.Second)
+	resp, err := cdh.etcdClient.Get(tctx, cdh.etcdPrefix+etcdClusterDataKey)
+	cancel()
 	if err != nil {
 		// TODO: check if it is better to use log
 		log.Printf("%v", err)
+		return cdRaw.Mysqls
 	}
 
-	cdRaw := clusterDataRaw{}
-	for _, ev := range resp.Kvs {
-		err = yaml.Unmarshal(ev.Value, &cdRaw)
-		if err != nil {
-			log.Fatal(err)
-		}
+	if len(resp.Kvs) == 0 {
+		return cdRaw.Mysqls
+	}
+	err = yaml.Unmarshal(resp.Kvs[0].Value, &cdRaw)
+	if err != nil {
+		log.Printf("There was an error unmarshaling data from etcd: %v\n", err)
 	}
 
 	return cdRaw.Mysqls

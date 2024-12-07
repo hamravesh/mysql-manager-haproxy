@@ -40,7 +40,7 @@ backend mysql-source
     mode tcp
     option srvtcpka
 {{- if .Host }}
-    server mysql-source {{.Host}}:3306 check
+    server s1 {{.Host}}:3306 check
 {{- end }}
 `
 
@@ -61,13 +61,14 @@ func (hcm *HAProxyConfigManager) Run(cdHandler *cdh.ClusterDataHandler) {
 	mysqlSourceData := cdh.MysqlData{}
 	hcm.writeHAProxyConfig(mysqlSourceData)
 	
-	cmd := exec.Command("haproxy", "-f", "/var/lib/haproxy/haproxy.cfg")
+	cmd := exec.Command("haproxy", "-sf", "-f", "/var/lib/haproxy/haproxy.cfg")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err := cmd.Start()
 	if err != nil {
 		panic(err)
 	}
+	defer cmd.Wait()
 	log.Println("Started haproxy process")
 	
 	ticker := time.NewTicker(time.Duration(hcm.ClusterDataCheckInterval) * time.Second)
@@ -78,6 +79,7 @@ func (hcm *HAProxyConfigManager) Run(cdHandler *cdh.ClusterDataHandler) {
 			cancelFunc()
 			cmd.Process.Kill()
 		case <-ticker.C:
+			log.Println("Reading data from etcd")
 			newMysqls := cdHandler.ReadClusterMysqls(ctx)
 			for _, m := range newMysqls {
 				if m.Role == cdh.Source {
@@ -90,7 +92,11 @@ func (hcm *HAProxyConfigManager) Run(cdHandler *cdh.ClusterDataHandler) {
 							continue
 						}
 						mysqlSourceData = m
-						cmd.Process.Signal(syscall.SIGUSR2)
+						// cmd.Process.Signal(syscall.SIGHUP)
+						cmd.Process.Kill()
+						cmd.Wait()
+						cmd = exec.Command("haproxy", "-sf", "-f", "/var/lib/haproxy/haproxy.cfg")
+						cmd.Start()
 					}
 				}
 			}

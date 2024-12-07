@@ -8,11 +8,11 @@ and run other containers:
 ```sh
 docker compose up -d mm
 docker compose exec mm python cli/mysql-cli.py init -f /etc/mm/cluster-spec.yaml
-docker compose up -d mm-hap --build
+docker compose up -d mm-haproxy --build
 ```
 
-for restarting `mm-hap`:
+for restarting `mm-haproxy`:
 ```sh
-docker compose down mm-hap && docker compose up -d --build mm-hap 
-docker compose logs mm-hap
+docker compose down mm-haproxy && docker compose up -d --build mm-haproxy 
+docker compose logs mm-haproxy
 ```
