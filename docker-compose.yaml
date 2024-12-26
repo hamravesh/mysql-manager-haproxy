@@ -22,6 +22,7 @@ services:
     ports:
     - 6070:6070
     - 3306:3306
+    - 3307:3307
     restart: always
   etcd: 
     image: quay.hamdocker.ir/coreos/etcd:v3.5.9-amd64
