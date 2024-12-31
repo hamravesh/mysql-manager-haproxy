@@ -14,6 +14,18 @@ import (
 	"time"
 )
 
+const t = `
+resolvers mydns
+    parse-resolv-conf
+	timeout resolve 10s
+	timeout retry 10s
+	resolve_retries 10
+    hold refused  10d
+    hold timeout  10d
+    hold nx       10d
+	hold other    10d
+`
+
 // TODO: support readonly mysql servers
 const tmplText = `global
     maxconn 10000
@@ -24,14 +36,9 @@ defaults
     mode tcp
     retries 10
     default-server init-addr last,libc,none
-    timeout client 28800s
-    timeout connect 100500
-    timeout server 28800s
-
-resolvers mydns
-    parse-resolv-conf
-    hold refused  1d
-    hold nx       10d
+	timeout client 1000s
+    timeout connect 1000s
+    timeout server 1000s
 
 frontend mysql-replica-fe
     bind *:3307
@@ -51,13 +58,13 @@ frontend stats
 backend mysql-replica
     mode tcp
 {{- if .ReplicaHost }}
-    server repl {{.ReplicaHost}}:3306 check resolvers mydns
+    server repl {{.ReplicaHost}}:3306 check
 {{- end }}
 
 backend mysql-source
     mode tcp
 {{- if .SourceHost }}
-    server src {{.SourceHost}}:3306 check resolvers mydns
+    server src {{.SourceHost}}:3306 check
 {{- end }}
 `
 
@@ -94,7 +101,7 @@ func (hcm *HAProxyConfigManager) Run(cdHandler *cdh.ClusterDataHandler) {
 	log.Println("Started haproxy process")
 
 	ticker := time.NewTicker(time.Duration(hcm.ClusterDataCheckInterval) * time.Second)
-	var haproxyNeedsRestart bool 
+	var haproxyNeedsRestart bool
 	for {
 		select {
 		case <-signalCh:
@@ -133,7 +140,7 @@ func (hcm *HAProxyConfigManager) Run(cdHandler *cdh.ClusterDataHandler) {
 				cmd.Wait()
 				cmd = exec.Command("haproxy", "-sf", "-f", "/var/lib/haproxy/haproxy.cfg")
 				cmd.Stdout = os.Stdout
-                cmd.Stderr = os.Stderr
+				cmd.Stderr = os.Stderr
 				cmd.Start()
 				log.Println("Restarted haproxy process")
 			}
