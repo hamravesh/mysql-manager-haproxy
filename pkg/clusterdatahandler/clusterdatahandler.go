@@ -42,11 +42,11 @@ type ClusterDataHandler struct {
 
 func NewClusterDataHandler(etcdHost, etcdUser, etcdPassword, etcdPrefix string) (*ClusterDataHandler, error) {
 	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{etcdHost},
-		Username:    etcdUser,
-		Password:    etcdPassword,
-		DialTimeout: 20 * time.Second,
-		MaxUnaryRetries: 5,
+		Endpoints:          []string{etcdHost},
+		Username:           etcdUser,
+		Password:           etcdPassword,
+		DialTimeout:        20 * time.Second,
+		MaxUnaryRetries:    5,
 		BackoffWaitBetween: 10 * time.Second,
 	})
 	if err != nil {
@@ -57,7 +57,7 @@ func NewClusterDataHandler(etcdHost, etcdUser, etcdPassword, etcdPrefix string) 
 
 func (cdh *ClusterDataHandler) ReadClusterMysqls(ctx context.Context) ClusterMysqls {
 	cdRaw := clusterDataRaw{}
-	tctx, cancel := context.WithTimeout(ctx, 5 * time.Second)
+	tctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	resp, err := cdh.etcdClient.Get(tctx, cdh.etcdPrefix+etcdClusterDataKey)
 	cancel()
 	if err != nil {

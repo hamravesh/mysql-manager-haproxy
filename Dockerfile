@@ -8,6 +8,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /tmp/mm-haproxy  main.go
 
 # TODO: add golang step 
 FROM hub.hamdocker.ir/haproxy:3.0.6-bookworm
+USER root
+RUN apt update && apt install -y socat
 COPY --from=gobuilder /tmp/mm-haproxy /bin/mm-haproxy 
-
+USER haproxy
 CMD ["/bin/mm-haproxy"]

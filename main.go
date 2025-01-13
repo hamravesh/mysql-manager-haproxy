@@ -10,7 +10,7 @@ import (
 	hc "mm-haproxy/pkg/haproxyconfig"
 )
 
-const clusterDataCheckIntervalDefault = 2
+const clusterDataCheckIntervalDefault = 5
 
 func main() {
 	etcdHost, ok := os.LookupEnv("ETCD_HOST")

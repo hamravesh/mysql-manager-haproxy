@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"syscall"
 	"text/template"
 
@@ -14,22 +15,11 @@ import (
 	"time"
 )
 
-const t = `
-resolvers mydns
-    parse-resolv-conf
-	timeout resolve 10s
-	timeout retry 10s
-	resolve_retries 10
-    hold refused  10d
-    hold timeout  10d
-    hold nx       10d
-	hold other    10d
-`
-
 // TODO: support readonly mysql servers
 const tmplText = `global
     maxconn 10000
-    stats socket ipv4@127.0.0.1:9999 expose-fd listeners level admin
+	master-worker no-exit-on-failure
+    stats socket /var/lib/haproxy/haproxy.sock expose-fd listeners level admin
 
 defaults
     log global
@@ -97,11 +87,12 @@ func (hcm *HAProxyConfigManager) Run(cdHandler *cdh.ClusterDataHandler) {
 	if err != nil {
 		panic(err)
 	}
-	defer cmd.Wait()
 	log.Println("Started haproxy process")
 
+	time.Sleep(5*time.Second)
+	
 	ticker := time.NewTicker(time.Duration(hcm.ClusterDataCheckInterval) * time.Second)
-	var haproxyNeedsRestart bool
+	var haproxyNeedsReload bool
 	for {
 		select {
 		case <-signalCh:
@@ -110,7 +101,7 @@ func (hcm *HAProxyConfigManager) Run(cdHandler *cdh.ClusterDataHandler) {
 			cmd.Process.Kill()
 		case <-ticker.C:
 			log.Println("Reading data from etcd")
-			haproxyNeedsRestart = false
+			haproxyNeedsReload = false
 			newMysqls := cdHandler.ReadClusterMysqls(ctx)
 			for _, m := range newMysqls {
 				if m.Role == cdh.Source {
@@ -118,34 +109,60 @@ func (hcm *HAProxyConfigManager) Run(cdHandler *cdh.ClusterDataHandler) {
 					if m.Host != haproxyConfigData.SourceHost {
 						log.Printf("Changing source to: %s", m.Host)
 						haproxyConfigData.SourceHost = m.Host
-						haproxyNeedsRestart = true
+						haproxyNeedsReload = true
 					}
 				} else if m.Role == cdh.Replica {
 					log.Printf("Current replica is: %s", m.Host)
 					if m.Host != haproxyConfigData.ReplicaHost {
 						log.Printf("Changing replica to: %s", m.Host)
 						haproxyConfigData.ReplicaHost = m.Host
-						haproxyNeedsRestart = true
+						haproxyNeedsReload = true
 					}
 				}
 			}
 
-			if haproxyNeedsRestart {
+			if haproxyNeedsReload {
 				err := hcm.writeHAProxyConfig(haproxyConfigData)
 				if err != nil {
 					log.Printf("%v", err)
 					continue
 				}
-				cmd.Process.Kill()
-				cmd.Wait()
-				cmd = exec.Command("haproxy", "-sf", "-f", "/var/lib/haproxy/haproxy.cfg")
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				cmd.Start()
+				cmd.Process.Signal(syscall.SIGUSR2)
+				time.Sleep(5*time.Second)
 				log.Println("Restarted haproxy process")
+			}
+
+			log.Println("Enabling servers if needed")
+			if hcm.needsReload("mysql-source") || hcm.needsReload("mysql-replica") {
+				cmd.Process.Signal(syscall.SIGUSR2)
+				log.Println("Reloaded haproxy process")
+				time.Sleep(2*time.Second)
 			}
 		}
 	}
+}
+
+func (hcm *HAProxyConfigManager) needsReload(backend string) bool {
+	showServersCommand := fmt.Sprintf("echo 'show servers state %s' | socat stdio /var/lib/haproxy/haproxy.sock", backend)
+	statusCmd := exec.Command("bash", "-c", showServersCommand)
+	out, err := statusCmd.CombinedOutput()
+	if err != nil {
+		log.Printf("Failure in getting server state src: %v\n", err.Error())
+		return false
+	}
+	outStr := string(out)
+	lines := strings.Split(outStr, "\n")
+	for _, line := range lines[1:] {
+		if strings.TrimSpace(line) == "" || strings.HasPrefix(line, "#") || strings.TrimSpace(line) == "1" {
+			continue
+		}
+		fields := strings.Split(line, " ")
+		log.Println(fields)
+		if fields[6] == "32" {
+			return true
+		}
+	}
+	return false
 }
 
 func (hcm *HAProxyConfigManager) writeHAProxyConfig(data HAProxyConfigData) error {
