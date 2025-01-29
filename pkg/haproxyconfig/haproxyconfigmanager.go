@@ -47,12 +47,14 @@ frontend stats
 
 backend mysql-replica
     mode tcp
+    option srvtcpka
 {{- if .ReplicaHost }}
     server repl {{.ReplicaHost}}:3306 check
 {{- end }}
 
 backend mysql-source
     mode tcp
+    option srvtcpka
 {{- if .SourceHost }}
     server src {{.SourceHost}}:3306 check
 {{- end }}
